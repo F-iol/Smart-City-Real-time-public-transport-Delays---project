@@ -3,7 +3,8 @@ import json
 import os
 
 def fetch_data():
-    secrets_path='./secrets/apiKey.txt'
+
+    secrets_path='../secrets/apiKey.txt'
     if not os.path.exists(secrets_path):
         print("API file is not in secrets/")
 
@@ -38,10 +39,11 @@ def fetch_data():
             'buses':buses_data,
             'trams':trams_data,
         }
-        
-        with open('sample_vehicles.json','w',encoding='utf-8') as f:
+        os.makedirs("../data",exist_ok=True)
+        with open('../data/sample_vehicles.json','w',encoding='utf-8') as f:
             json.dump(vehicles,f,indent=2,ensure_ascii=False)
             print('Vehicles done')
+
     except requests.exceptions.RequestException as e:
         print('Vehicle Request failed: ',e)
 
@@ -52,7 +54,8 @@ def fetch_data():
         response_stops.raise_for_status()
         stops_data=response_stops.json()
 
-        with open('sample_stops.json','w',encoding='utf-8') as f:
+        os.makedirs("../data",exist_ok=True)
+        with open('../data/sample_stops.json','w',encoding='utf-8') as f:
             json.dump(stops_data,f,ensure_ascii=False,indent=2)
             print("Stops done")
 
@@ -67,7 +70,8 @@ def fetch_data():
         response_traffic.raise_for_status()
         traffic_data = response_traffic.json()
 
-        with open('sample_traffic','w',encoding='utf-8') as f:
+        os.makedirs("../data",exist_ok=True)
+        with open('../data/sample_traffic.json','w',encoding='utf-8') as f:
             json.dump(traffic_data,f,indent=2,ensure_ascii=False)
             print('Traffic done')
 
