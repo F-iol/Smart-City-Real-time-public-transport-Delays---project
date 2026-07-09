@@ -13,3 +13,10 @@ data/
 
 
 .python-version
+
+.terraform*
+terraform/*.backup
+terraform/lambda*
+*.tfstate
+.env
+*.json
