@@ -27,6 +27,12 @@ resource "aws_s3_bucket" "silver" {
 }
 
 
+resource "aws_s3_bucket" "glue_config" {
+  bucket = "${var.project_name}-glue-config-${var.suffix}"
+  force_destroy = true  
+  
+}
+
 ## catalog
 
 resource "aws_glue_catalog_database" "smart_city_catalog" {
@@ -69,7 +75,9 @@ resource "aws_iam_policy" "glue_s3_access" {
           aws_s3_bucket.bronze.arn,
           "${aws_s3_bucket.bronze.arn}/*",
           aws_s3_bucket.silver.arn,
-          "${aws_s3_bucket.silver.arn}/*"
+          "${aws_s3_bucket.silver.arn}/*",
+          aws_s3_bucket.glue_config.arn,
+          "${aws_s3_bucket.glue_config.arn}/*",
         ]
       }
     ]
@@ -87,6 +95,9 @@ resource "aws_iam_role_policy_attachment" "glue_service" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole"
 }
 
+## Crawler
+
+
 resource "aws_glue_crawler" "silver_crawler" {
     database_name = aws_glue_catalog_database.smart_city_catalog.name
     name="${var.project_name}-silver-crawler-${var.suffix}"
@@ -95,4 +106,41 @@ resource "aws_glue_crawler" "silver_crawler" {
     s3_target {
       path="s3://${aws_s3_bucket.silver.bucket}/"
     }
+}
+
+## ETL 
+
+resource "aws_glue_job" "bronze_to_silver" {
+    name = "${var.project_name}-bronze-to-silver-${var.suffix}"
+    role_arn = aws_iam_role.glue_crawler_role.arn
+    glue_version="5.0"
+    command{
+      name = "glueetl"
+      script_location = "s3://${aws_s3_bucket.glue_config.bucket}/scripts/bronze_to_silver.py"
+      python_version = "3"
+    }  
+
+    number_of_workers = 2
+    worker_type = "G.1X"
+
+    timeout = 20
+
+    default_arguments = {
+      "--job-language" = "python"
+      "--continuous-log-logGroup" = "/aws-glue/jobs/smart-city-silver"
+      "--enable-continuous-cloudwatch-log" = "true"
+      "--BRONZE_BUCKET" = aws_s3_bucket.bronze.bucket
+      "--SILVER_BUCKET" = aws_s3_bucket.silver.bucket
+    }
+}
+
+### upload to aws
+
+resource "aws_s3_object" "bronze_to_silver_script" {
+    bucket = aws_s3_bucket.glue_config.bucket
+    key="scripts/bronze_to_silver.py"
+    source = "${path.module}/../scripts/bronze_to_silver.py"
+
+    
+    etag = filemd5("${path.module}/../scripts/bronze_to_silver.py")
 }
