@@ -48,8 +48,8 @@ resource "aws_glue_catalog_database" "smart_city_catalog" {
 }
 # IAM ROLES
 
-resource "aws_iam_role" "glue_crawler_role" {
-    name = "${var.project_name}-glue-crawler-role-${var.suffix}"
+resource "aws_iam_role" "glue_service_role" {
+    name = "${var.project_name}-glue-service-role-${var.suffix}"
 
     assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -84,6 +84,8 @@ resource "aws_iam_policy" "glue_s3_access" {
           "${aws_s3_bucket.silver.arn}/*",
           aws_s3_bucket.glue_config.arn,
           "${aws_s3_bucket.glue_config.arn}/*",
+          aws_s3_bucket.gold.arn,
+          "${aws_s3_bucket.gold.arn}/*",
         ]
       }
     ]
@@ -92,33 +94,52 @@ resource "aws_iam_policy" "glue_s3_access" {
 }
 
 resource "aws_iam_role_policy_attachment" "glue_s3_attach" {
-  role       = aws_iam_role.glue_crawler_role.name
+  role       = aws_iam_role.glue_service_role.name
   policy_arn = aws_iam_policy.glue_s3_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "glue_service" {
-  role       = aws_iam_role.glue_crawler_role.name
+  role       = aws_iam_role.glue_service_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole"
 }
 
-## Crawler
+## Crawlers
 
 
 resource "aws_glue_crawler" "silver_crawler" {
     database_name = aws_glue_catalog_database.smart_city_catalog.name
     name="${var.project_name}-silver-crawler-${var.suffix}"
-    role=aws_iam_role.glue_crawler_role.arn 
+    role=aws_iam_role.glue_service_role.arn 
     
     s3_target {
       path="s3://${aws_s3_bucket.silver.bucket}/"
     }
 }
 
+resource "aws_glue_crawler" "gold_crawler" {
+    database_name = aws_glue_catalog_database.smart_city_catalog.name
+    name="${var.project_name}-gold-crawler-${var.suffix}"
+    role=aws_iam_role.glue_service_role.arn 
+    
+    s3_target {
+      path="s3://${aws_s3_bucket.gold.bucket}/"
+    }
+
+    configuration = jsonencode({
+    Version = 1.0
+    Grouping = {
+        TableLevelConfiguration = 2
+    }
+  })
+
+}
+
+
 ## ETL 
 
 resource "aws_glue_job" "bronze_to_silver" {
     name = "${var.project_name}-bronze-to-silver-${var.suffix}"
-    role_arn = aws_iam_role.glue_crawler_role.arn
+    role_arn = aws_iam_role.glue_service_role.arn
     glue_version="5.0"
     command{
       name = "glueetl"
@@ -142,7 +163,7 @@ resource "aws_glue_job" "bronze_to_silver" {
 
 resource "aws_glue_job" "gold_stop_congestion" {
     name = "${var.project_name}-gold-stop-congestion-${var.suffix}"
-    role_arn = aws_iam_role.glue_crawler_role.arn
+    role_arn = aws_iam_role.glue_service_role.arn
     glue_version="5.0"
     command{
       name = "glueetl"
