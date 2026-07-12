@@ -33,6 +33,12 @@ resource "aws_s3_bucket" "glue_config" {
   
 }
 
+resource "aws_s3_bucket" "gold" {
+    bucket = "${var.project_name}-gold-${var.suffix}"
+    force_destroy = true
+  
+}
+
 ## catalog
 
 resource "aws_glue_catalog_database" "smart_city_catalog" {
@@ -134,6 +140,31 @@ resource "aws_glue_job" "bronze_to_silver" {
     }
 }
 
+resource "aws_glue_job" "gold_stop_congestion" {
+    name = "${var.project_name}-gold-stop-congestion-${var.suffix}"
+    role_arn = aws_iam_role.glue_crawler_role.arn
+    glue_version="5.0"
+    command{
+      name = "glueetl"
+      script_location = "s3://${aws_s3_bucket.glue_config.bucket}/scripts/gold_stop_congestion.py"
+      python_version = "3"
+    }  
+
+    number_of_workers = 2
+    worker_type = "G.1X"
+
+    timeout = 20
+
+    default_arguments = {
+      "--job-language" = "python"
+      "--continuous-log-logGroup" = "/aws-glue/jobs/smart-city-silver"
+      "--enable-continuous-cloudwatch-log" = "true"
+      "--SILVER_BUCKET" = aws_s3_bucket.silver.bucket
+      "--GOLD_BUCKET" = aws_s3_bucket.gold.bucket
+    }
+}
+
+
 ### upload to aws
 
 resource "aws_s3_object" "bronze_to_silver_script" {
@@ -143,4 +174,12 @@ resource "aws_s3_object" "bronze_to_silver_script" {
 
     
     etag = filemd5("${path.module}/../scripts/bronze_to_silver.py")
+}
+
+resource "aws_s3_object" "gold_stop_congestion_script" {
+    bucket = aws_s3_bucket.glue_config.bucket
+    key= "scripts/gold_stop_congestion.py"
+    source = "${path.module}/../scripts/gold_stop_congestion.py"
+
+    etag = filemd5("${path.module}/../scripts/gold_stop_congestion.py")  
 }
