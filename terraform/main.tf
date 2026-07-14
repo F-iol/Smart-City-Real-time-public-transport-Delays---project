@@ -185,6 +185,77 @@ resource "aws_glue_job" "gold_stop_congestion" {
     }
 }
 
+resource "aws_glue_job" "gold_active_fleet" {
+    name = "${var.project_name}-gold-active-fleet-${var.suffix}"
+    role_arn = aws_iam_role.glue_service_role.arn
+    glue_version="5.0"
+    command{
+      name = "glueetl"
+      script_location = "s3://${aws_s3_bucket.glue_config.bucket}/scripts/gold_active_fleet.py"
+      python_version = "3"
+    }  
+
+    number_of_workers = 2
+    worker_type = "G.1X"
+
+    timeout = 20
+
+    default_arguments = {
+      "--job-language" = "python"
+      "--continuous-log-logGroup" = "/aws-glue/jobs/smart-city-silver"
+      "--enable-continuous-cloudwatch-log" = "true"
+      "--SILVER_BUCKET" = aws_s3_bucket.silver.bucket
+      "--GOLD_BUCKET" = aws_s3_bucket.gold.bucket
+    }
+}
+
+resource "aws_glue_job" "gold_delayed_by_traffic" {
+    name = "${var.project_name}-gold-delayed-by-traffic-${var.suffix}"
+    role_arn = aws_iam_role.glue_service_role.arn
+    glue_version="5.0"
+    command{
+      name = "glueetl"
+      script_location = "s3://${aws_s3_bucket.glue_config.bucket}/scripts/gold_delayed_by_traffic.py"
+      python_version = "3"
+    }  
+
+    number_of_workers = 2
+    worker_type = "G.1X"
+
+    timeout = 20
+
+    default_arguments = {
+      "--job-language" = "python"
+      "--continuous-log-logGroup" = "/aws-glue/jobs/smart-city-silver"
+      "--enable-continuous-cloudwatch-log" = "true"
+      "--SILVER_BUCKET" = aws_s3_bucket.silver.bucket
+      "--GOLD_BUCKET" = aws_s3_bucket.gold.bucket
+    }
+}
+
+resource "aws_glue_job" "gold_speed_anomalies" {
+    name = "${var.project_name}-gold-speed-anomalies-${var.suffix}"
+    role_arn = aws_iam_role.glue_service_role.arn
+    glue_version="5.0"
+    command{
+      name = "glueetl"
+      script_location = "s3://${aws_s3_bucket.glue_config.bucket}/scripts/gold_speed_anomalies.py"
+      python_version = "3"
+    }  
+
+    number_of_workers = 2
+    worker_type = "G.1X"
+
+    timeout = 20
+
+    default_arguments = {
+      "--job-language" = "python"
+      "--continuous-log-logGroup" = "/aws-glue/jobs/smart-city-silver"
+      "--enable-continuous-cloudwatch-log" = "true"
+      "--SILVER_BUCKET" = aws_s3_bucket.silver.bucket
+      "--GOLD_BUCKET" = aws_s3_bucket.gold.bucket
+    }
+}
 
 ### upload to aws
 
@@ -203,4 +274,26 @@ resource "aws_s3_object" "gold_stop_congestion_script" {
     source = "${path.module}/../scripts/gold_stop_congestion.py"
 
     etag = filemd5("${path.module}/../scripts/gold_stop_congestion.py")  
+}
+
+resource "aws_s3_object" "gold_active_fleet_script" {
+    bucket = aws_s3_bucket.glue_config.bucket
+    key="scripts/gold_active_fleet.py"
+    source = "${path.module}/../scripts/gold_active_fleet.py"
+
+    etag = filemd5("${path.module}/../scripts/gold_active_fleet.py")
+}
+
+resource "aws_s3_object" "gold_delayed_by_traffic_script" {
+    bucket = aws_s3_bucket.glue_config.bucket
+    key = "scripts/gold_delayed_by_traffic.py"
+    source = "${path.module}/../scripts/gold_delayed_by_traffic.py"
+    etag = filemd5("${path.module}/../scripts/gold_delayed_by_traffic.py")
+}
+
+resource "aws_s3_object" "gold_speed_anomalies" {
+    bucket = aws_s3_bucket.glue_config.bucket
+    key = "scripts/gold_speed_anomalies.py"
+    source = "${path.module}/../scripts/gold_speed_anomalies.py"
+    etag = filemd5("${path.module}/../scripts/gold_speed_anomalies.py")
 }
