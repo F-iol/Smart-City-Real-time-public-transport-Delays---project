@@ -103,6 +103,58 @@ resource "aws_iam_role_policy_attachment" "glue_service" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole"
 }
 
+resource "aws_iam_role" "sfn_role" {
+  name = "${var.project_name}-sfn-role-${var.suffix}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "states.amazonaws.com"
+      }
+    }]
+  })
+  
+}
+
+resource "aws_iam_policy" "sfn_glue_policy" {
+  name = "${var.project_name}-sfn-glue-policy-${var.suffix}"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "glue:StartJobRun",
+          "glue:GetJobRun",
+          "glue:GetJobRuns",
+          "glue:BatchStopJobRun",
+          "glue:StartCrawler"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect= "Allow"
+        Action = [
+          "events:PutTargets",
+          "events:PutRule",
+          "events:DescribeRule"
+        ]
+        Resource = "*"
+      }]
+    })
+}
+
+resource "aws_iam_role_policy_attachment" "sfn_glue_attach" {
+  role = aws_iam_role.sfn_role.name
+  policy_arn = aws_iam_policy.sfn_glue_policy.arn
+  
+}
+
+
 ## Crawlers
 
 
@@ -296,4 +348,100 @@ resource "aws_s3_object" "gold_speed_anomalies" {
     key = "scripts/gold_speed_anomalies.py"
     source = "${path.module}/../scripts/gold_speed_anomalies.py"
     etag = filemd5("${path.module}/../scripts/gold_speed_anomalies.py")
+}
+
+
+#### AWS STEP FUNCTION
+
+resource "aws_sfn_state_machine" "smart_city_pipeline" {
+  name = "${var.project_name}-pipeline-${var.suffix}"
+  role_arn = aws_iam_role.sfn_role.arn
+  
+  definition = jsonencode({
+    StartAt = "BronzeToSilver"
+    States = {
+      BronzeToSilver ={
+        Type = "Task"
+        Resource = "arn:aws:states:::glue:startJobRun.sync"
+        Parameters = {
+          JobName=aws_glue_job.bronze_to_silver.name
+        }
+        Next = "StartSilverCrawler"
+      }
+
+      StartSilverCrawler = {
+        Type="Task"
+        Resource= "arn:aws:states:::aws-sdk:glue:startCrawler"
+        Parameters= {
+          Name = aws_glue_crawler.silver_crawler.name
+        }
+        Next = "GoldJobs"
+      }
+
+      GoldJobs = {
+        Type ="Parallel"
+        Next = "StartGoldCrawler"
+        Branches = [
+          {
+            StartAt = "GoldStopCongestion"
+            States = {
+              GoldStopCongestion = {
+                Type = "Task"
+                Resource = "arn:aws:states:::glue:startJobRun.sync"
+                Parameters = {
+                  JobName = aws_glue_job.gold_stop_congestion.name
+                }
+                End = true
+              }
+            },
+            StartAt = "GoldSpeedAnomalies"
+            States = {
+              GoldSpeedAnomalies = {
+                Type = "Task"
+                Resource = "arn:aws:states:::glue:startJobRun.sync"
+                Parameters ={
+                  JobName = aws_glue_job.gold_speed_anomalies.name
+                }
+                End= true
+              }
+            },
+            StartAt = "GoldDelayedByTraffic"
+            States = {
+              GoldDelayedByTraffic = {
+                Type = "Task"
+                Resource = "arn:aws:states:::glue:startJobRun.sync"
+                Parameters ={
+                  JobName = aws_glue_job.gold_delayed_by_traffic.name
+                }
+                End= true
+              }
+            },
+            StartAt = "GoldActiveFleet"
+            States = {
+              GoldActiveFleet = {
+                Type = "Task"
+                Resource = "arn:aws:states:::glue:startJobRun.sync"
+                Parameters ={
+                  JobName = aws_glue_job.gold_active_fleet.name
+                }
+                End= true
+              }
+            },
+
+          }
+        ]
+      }
+
+      StartGoldCrawler = {
+        Type = "Task"
+        Resource = "arn:aws:states:::aws-sdk:glue:startCrawler"
+        Parameters = {
+          Name = aws_glue_crawler.gold_crawler.name
+    
+        }
+        End = true
+      }
+    }
+  })
+  
 }

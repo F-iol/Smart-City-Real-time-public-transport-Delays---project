@@ -1,64 +1,62 @@
-## Current outlook
+## Workflow Diagram
 ```mermaid
-graph TB
+graph LR
 
-classDef success fill:#d4edda,stroke:#28a745,stroke-width:2px,color:#155724;
-classDef tech fill:#e2e3e5,stroke:#383d41,stroke-width:1px,color:#383d41;
+classDef s3 fill:#cce5ff,stroke:#004085,stroke-width:2px,color:#004085;
+classDef glue fill:#d4edda,stroke:#28a745,stroke-width:2px,color:#155724;
+classDef cat fill:#fff3cd,stroke:#856404,stroke-width:2px,color:#856404;
+classDef endp fill:#e2e3e5,stroke:#383d41,stroke-width:2px,color:#383d41;
+classDef sfn fill:#ced4da,stroke:#495057,stroke-width:3px,color:#212529;
 
+API[WAW API<br/>Data Pull] --> B[(S3 Bronze)]
 
-%% ---------- TECHNOLOGY STACK ----------
-subgraph Tools["Technologies"]
+subgraph SFN["AWS Step Functions<br/>Pipeline Orchestration"]
     direction LR
 
-    T1[Python]
-    T2[PySpark<br>Apache Spark 3.5]
-    T3[Terraform]
-    T4[AWS Glue 5.0]
+    J1[Glue Job<br/>Bronze → Silver]
+    S[(S3 Silver)]
+    C1[Silver Crawler]
+    DBS[(Glue Catalog)]
 
-    T1 --- T2 --- T3 --- T4
-end
+    J1 --> S
+    S --> C1
+    C1 --> DBS
+    DBS --> GoldJobs
 
-class T1,T2,T3,T4 tech;
+    subgraph GoldJobs["Parallel Gold Glue Jobs"]
+        direction TB
 
-
-%% ---------- PIPELINE ----------
-subgraph Pipeline["Data Pipeline"]
-    direction LR
-
-    subgraph Bronze["Etap 1: Ingestion & Bronze Layer"]
-        A[Warsaw Public Transport API]
-        B["S3 Bronze<br>smart-city-bronze-fiol"]
-
-        A -->|fetch_to_s3.py| B
+        G1[stop_congestion]
+        G2[line_speed_anomalies]
+        G3[active_fleet]
+        G4[incident_impact]
     end
 
+    GLD[(S3 Gold)]
+    C2[Gold Crawler]
+    DBG[(Glue Catalog)]
 
-    subgraph Silver["Etap 2: Silver Layer"]
-        C{{"AWS Glue Job<br>bronze_to_silver.py"}}
-        D["S3 Silver<br>Parquet + partitions"]
-        E["Glue Crawler"]
-        F[("Glue Data Catalog<br>Database + Tables")]
-        G[["Amazon Athena<br>SQL Analytics"]]
-
-        C -->|Parquet| D
-        D --> E
-        E --> F
-        F --> G
-    end
-
-
-    B --> C
+    GoldJobs --> GLD
+    GLD --> C2
+    C2 --> DBG
 
 end
 
+B --> J1
 
-%% invisible positioning link
-Tools ~~~ Pipeline
+DBG --> ATH[Athena Analytics]
 
 
-class A,B,C,D,E,F,G success;
+class B,GLD,S s3;
+class J1,C1,G1,G2,G3,G4,C2 glue;
+class DBS cat;
+class DBG cat;
+class API,ATH endp;
+class SFN sfn;
 ```
 
+## AWS Step Func. preview
+![](images/image.png)
 
 ## AWS Lambda problem
 
